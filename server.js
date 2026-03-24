@@ -3,6 +3,7 @@ const morgan = require('morgan');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const connectDb = require('./config/config'); // MongoDB connection
+const path = require('path');
 require('colors');
 
 // Load environment variables
@@ -13,14 +14,37 @@ connectDb();
 
 const app = express();
 
-// Middleware
+// ================= MIDDLEWARE =================
+
+// Enable CORS
 app.use(cors());
+
+// Parse JSON
 app.use(express.json());
+
+// Logger
 app.use(morgan('dev'));
 
-// Routes
+// ✅ SERVE UPLOADED IMAGES (VERY IMPORTANT)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+
+// ================= ROUTES =================
+
 const itemRoutes = require("./routes/itemsroute");
-app.use('/api/items', itemRoutes);
+
+// Use routes
+app.use('/api', itemRoutes);
+
+
+// ================= ROOT ROUTE =================
+
+app.get('/', (req, res) => {
+  res.send('API is running...');
+});
+
+
+// ================= SERVER =================
 
 const PORT = process.env.PORT || 8080;
 
