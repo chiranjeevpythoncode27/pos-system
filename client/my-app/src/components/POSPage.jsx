@@ -1,4 +1,3 @@
-// AdminPage.jsx
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Button, Modal, Form, Alert, Badge } from 'react-bootstrap';
 import { itemAPI } from '../services/api';
@@ -17,7 +16,11 @@ const AdminPage = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [itemToDelete, setItemToDelete] = useState(null);
   const [alert, setAlert] = useState({ show: false, message: '', type: '' });
+  
+  // Image handling
   const [imageUrl, setImageUrl] = useState('');
+  const [imageFile, setImageFile] = useState(null); // Keep track of file if needed
+  
   const [availableWeights, setAvailableWeights] = useState(['All']);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -29,20 +32,18 @@ const AdminPage = () => {
 
   // Predefined weight options
   const weightOptions = [
+    { value: '100gm', label: '100 gm' },
     { value: '250gm', label: '250 gm' },
     { value: '500gm', label: '500 gm' },
-    { value: '1kg', label: '1 kg' },
-    { value: '2kg', label: '2 kg' },
-    { value: '5kg', label: '5 kg' },
-    { value: '10kg', label: '10 kg' },
-    { value: '25kg', label: '25 kg' },
+    { value: '1000', label: '1 kg' },
+    { value: '2000', label: '2 kg' },
+    { value: '5000', label: '5 kg' },
     { value: 'piece', label: 'Per Piece' },
-    { value: 'dozen', label: 'Per Dozen' },
-    { value: 'box', label: 'Per Box' }
+    { value: 'dozen', label: 'Per Dozen' }
   ];
 
   // Categories that typically have weights
-  const weightBasedCategories = ['Pulses', 'Masala', 'Dal', 'Rice', 'Flour', 'Grains', 'Spices', 'Sugar', 'Salt'];
+  const weightBasedCategories = ['Pulses', 'Masala', 'Dal', 'Rice', 'Flour', 'Grains', 'Spices', 'Sugar', 'Salt', 'Dry Fruits', 'Grocery'];
 
   useEffect(() => {
     fetchItems();
@@ -70,7 +71,6 @@ const AdminPage = () => {
     try {
       setLoading(true);
       const response = await itemAPI.getAll();
-      console.log('Fetched items response:', response);
       
       let itemsData = [];
       if (response && response.data) {
@@ -78,8 +78,6 @@ const AdminPage = () => {
           itemsData = response.data;
         } else if (response.data.items && Array.isArray(response.data.items)) {
           itemsData = response.data.items;
-        } else {
-          itemsData = [];
         }
       }
       
@@ -105,9 +103,6 @@ const AdminPage = () => {
         const uniqueCategories = ['All', ...new Set(processedItems.map(item => item.category).filter(Boolean))];
         setCategories(uniqueCategories);
         
-        if (processedItems.length > 0) {
-          console.log(`Loaded ${processedItems.length} items`);
-        }
       } else {
         setItems([]);
         setCategories(['All']);
@@ -123,33 +118,21 @@ const AdminPage = () => {
 
   const extractWeightFromName = (name) => {
     if (!name) return null;
-    
     const weightPatterns = [
       { pattern: /(\d+)\s*kg/i, unit: 'kg' },
       { pattern: /(\d+)\s*gm/i, unit: 'gm' },
       { pattern: /(\d+)\s*g/i, unit: 'gm' },
-      { pattern: /(\d+)\s*kilogram/i, unit: 'kg' },
       { pattern: /250\s*gm/i, value: '250gm' },
       { pattern: /500\s*gm/i, value: '500gm' },
       { pattern: /1\s*kg/i, value: '1kg' },
-      { pattern: /2\s*kg/i, value: '2kg' },
-      { pattern: /5\s*kg/i, value: '5kg' },
-      { pattern: /10\s*kg/i, value: '10kg' },
-      { pattern: /25\s*kg/i, value: '25kg' }
     ];
-
     for (const patternObj of weightPatterns) {
       const match = name.match(patternObj.pattern);
       if (match) {
-        if (patternObj.value) {
-          return patternObj.value;
-        }
-        if (patternObj.unit) {
-          return `${match[1]}${patternObj.unit}`;
-        }
+        if (patternObj.value) return patternObj.value;
+        if (patternObj.unit) return `${match[1]}${patternObj.unit}`;
       }
     }
-    
     return null;
   };
 
@@ -160,21 +143,17 @@ const AdminPage = () => {
     }
     
     let filtered = [...items];
-    
     if (selectedCategory !== 'All') {
       filtered = filtered.filter(item => item && item.category === selectedCategory);
     }
-    
     if (selectedWeight !== 'All' && weightBasedCategories.includes(selectedCategory)) {
       filtered = filtered.filter(item => item && item.weight === selectedWeight);
     }
-    
     if (searchTerm) {
       filtered = filtered.filter(item => 
         item && (
           (item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (item.weight && item.weight.toLowerCase().includes(searchTerm.toLowerCase()))
+          (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase()))
         )
       );
     }
@@ -188,13 +167,9 @@ const AdminPage = () => {
   };
 
   const openAddItemModal = () => {
-    setFormData({
-      name: '',
-      price: '',
-      category: '',
-      weight: ''
-    });
+    setFormData({ name: '', price: '', category: '', weight: '' });
     setImageUrl('');
+    setImageFile(null);
     setEditingItem(null);
     setShowItemModal(true);
   };
@@ -207,6 +182,7 @@ const AdminPage = () => {
       weight: item.weight || ''
     });
     setImageUrl(item.image || '');
+    setImageFile(null);
     setEditingItem(item);
     setShowItemModal(true);
   };
@@ -220,66 +196,68 @@ const AdminPage = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  // Handle Image Upload from File Input
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Check file size (limit to 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        showAlert('Image is too large. Please select an image under 10MB.', 'warning');
+        e.target.value = ''; // Reset input
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImageUrl(reader.result); // Base64 string
+        setImageFile(file);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmitItem = async (e) => {
     e.preventDefault();
-    
     if (!formData.name || !formData.price || !formData.category) {
       showAlert('Please fill in all required fields', 'warning');
       return;
     }
-
     setSubmitting(true);
 
     try {
-      // Prepare item data
       const itemData = {
         name: formData.name,
         price: parseFloat(formData.price),
         category: formData.category,
-        image: imageUrl || '' // Send image URL
+        image: imageUrl || '' // This will now be a Base64 string or an existing URL
       };
       
-      // Add weight if selected
       if (formData.weight) {
         itemData.weight = formData.weight;
       }
       
-      console.log('📤 Submitting item data:', itemData);
-      
       let response;
-      
       if (editingItem) {
         const itemId = editingItem._id || editingItem.id;
-        console.log('🔄 Updating item with ID:', itemId);
         response = await itemAPI.update(itemId, itemData);
         showAlert('Item updated successfully', 'success');
       } else {
-        console.log('➕ Creating new item');
         response = await itemAPI.create(itemData);
         showAlert('Item added successfully', 'success');
       }
       
-      console.log('✅ Response:', response.data || response);
-      
       setShowItemModal(false);
       await fetchItems();
-      
     } catch (error) {
-      console.error('❌ Error saving item:', error);
-      
+      console.error('Error saving item:', error);
       let errorMessage = 'Error saving item. ';
-      if (error.response) {
-        console.error('Error response data:', error.response.data);
-        errorMessage = `Server error (${error.response.status})`;
-        if (error.response.data && error.response.data.message) {
-          errorMessage = error.response.data.message;
-        }
-      } else if (error.request) {
-        errorMessage = 'No response from server. Check if backend is running.';
+      if (error.response && error.response.status === 413) {
+        errorMessage = 'Image is too large to save. Please choose a smaller photo.';
+      } else if (error.response) {
+        errorMessage = error.response.data?.message || `Server error (${error.response.status})`;
       } else {
         errorMessage = error.message;
       }
-      
       showAlert(errorMessage, 'danger');
     } finally {
       setSubmitting(false);
@@ -288,26 +266,13 @@ const AdminPage = () => {
 
   const handleDeleteItem = async () => {
     if (!itemToDelete) return;
-    
     try {
-      const response = await itemAPI.delete(itemToDelete._id);
-      console.log('Delete response:', response);
+      await itemAPI.delete(itemToDelete._id);
       showAlert('Item deleted successfully', 'success');
       setShowDeleteModal(false);
       await fetchItems();
     } catch (error) {
-      console.error('Error deleting item:', error);
-      
-      let errorMessage = 'Error deleting item. ';
-      if (error.response) {
-        errorMessage += error.response.data?.message || `Server error: ${error.response.status}`;
-      } else if (error.request) {
-        errorMessage += 'No response from server.';
-      } else {
-        errorMessage += error.message;
-      }
-      
-      showAlert(errorMessage, 'danger');
+      showAlert('Error deleting item', 'danger');
     }
   };
 
@@ -328,16 +293,12 @@ const AdminPage = () => {
     return option ? option.label : weightValue;
   };
 
-  const isWeightBasedCategory = (category) => {
-    return weightBasedCategories.includes(category);
-  };
-
   if (loading) {
     return (
       <Container fluid className="admin-container">
         <div className="loading-screen">
           <div className="loader"></div>
-          <p className="loading-text">Loading inventory...</p>
+          <p className="loading-text">Loading Dashboard...</p>
         </div>
       </Container>
     );
@@ -345,225 +306,180 @@ const AdminPage = () => {
 
   return (
     <Container fluid className="admin-container">
+      {/* Toast Alert */}
       {alert.show && (
         <Alert variant={alert.type} className="alert-toast" dismissible onClose={() => setAlert({ ...alert, show: false })}>
-          {alert.message}
+          <div className="alert-content">
+            {alert.type === 'success' ? '✅' : '⚠️'} {alert.message}
+          </div>
         </Alert>
       )}
 
+      {/* Header */}
       <div className="admin-header">
         <div className="header-content">
-          <h1 className="page-title">Admin Dashboard</h1>
-          <p className="page-subtitle">Manage your inventory items</p>
+          <h1 className="page-title">Store Dashboard</h1>
+          <p className="page-subtitle">Manage your inventory efficiently</p>
         </div>
         
         <div className="header-actions">
           <button className="action-btn refresh-btn" onClick={fetchItems}>
-            🔄 Refresh
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.26l5.08 5.08"/></svg>
+            Refresh
           </button>
           <button className="action-btn add-btn" onClick={openAddItemModal}>
-            ➕ Add New Item
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Add New Item
           </button>
         </div>
       </div>
 
+      {/* Stats Cards */}
       <Row className="stats-row">
         <Col xs={12} sm={6} md={3}>
           <div className="stat-card">
-            <div className="stat-icon">📦</div>
+            <div className="stat-icon-wrapper items">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            </div>
             <div className="stat-content">
-              <h3 className="stat-value">{Array.isArray(items) ? items.length : 0}</h3>
               <p className="stat-label">Total Items</p>
+              <h3 className="stat-value">{Array.isArray(items) ? items.length : 0}</h3>
             </div>
           </div>
         </Col>
         <Col xs={12} sm={6} md={3}>
           <div className="stat-card">
-            <div className="stat-icon">🏷️</div>
+            <div className="stat-icon-wrapper categories">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            </div>
             <div className="stat-content">
-              <h3 className="stat-value">{categories.length - 1}</h3>
               <p className="stat-label">Categories</p>
+              <h3 className="stat-value">{categories.length - 1}</h3>
             </div>
           </div>
         </Col>
         <Col xs={12} sm={6} md={3}>
           <div className="stat-card">
-            <div className="stat-icon">💰</div>
+            <div className="stat-icon-wrapper value">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+            </div>
             <div className="stat-content">
+              <p className="stat-label">Total Value</p>
               <h3 className="stat-value">
                 ₹{Array.isArray(items) ? items.reduce((sum, item) => sum + (Number(item?.price) || 0), 0).toFixed(2) : '0.00'}
               </h3>
-              <p className="stat-label">Total Value</p>
-            </div>
-          </div>
-        </Col>
-        <Col xs={12} sm={6} md={3}>
-          <div className="stat-card">
-            <div className="stat-icon">⚖️</div>
-            <div className="stat-content">
-              <h3 className="stat-value">
-                {Array.isArray(items) ? items.filter(item => item?.weight).length : 0}
-              </h3>
-              <p className="stat-label">Weighted Items</p>
             </div>
           </div>
         </Col>
       </Row>
 
+      {/* Filters */}
       <div className="filters-section">
-        <Row>
-          <Col md={3}>
+        <Row className="g-3">
+          <Col md={4}>
             <div className="search-box">
-              <span className="search-icon">🔍</span>
+              <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               <input
                 type="text"
                 className="search-input"
-                placeholder="Search items..."
+                placeholder="Search inventory..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
-              {searchTerm && (
-                <button className="clear-search" onClick={() => setSearchTerm('')}>
-                  ✕
-                </button>
-              )}
             </div>
           </Col>
           
           <Col md={3}>
-            <div className="category-filters">
-              <select 
-                className="filter-select"
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-              >
-                {categories.map(category => (
-                  <option key={category} value={category}>
-                    {category} ({getCategoryCount(category)})
+            <select className="modern-select" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
+              {categories.map(category => (
+                <option key={category} value={category}>
+                  {category} ({getCategoryCount(category)})
+                </option>
+              ))}
+            </select>
+          </Col>
+          
+          <Col md={3}>
+            {weightBasedCategories.includes(selectedCategory) && (
+              <select className="modern-select" value={selectedWeight} onChange={(e) => setSelectedWeight(e.target.value)}>
+                {availableWeights.map(weight => (
+                  <option key={weight} value={weight}>
+                    {weight === 'All' ? 'All Weights' : getWeightLabel(weight)}
                   </option>
                 ))}
               </select>
-            </div>
-          </Col>
-          
-          <Col md={3}>
-            {isWeightBasedCategory(selectedCategory) && (
-              <div className="weight-filters">
-                <select 
-                  className="filter-select"
-                  value={selectedWeight}
-                  onChange={(e) => setSelectedWeight(e.target.value)}
-                >
-                  {availableWeights.map(weight => (
-                    <option key={weight} value={weight}>
-                      {weight === 'All' ? 'All Weights' : getWeightLabel(weight)}
-                    </option>
-                  ))}
-                </select>
-              </div>
             )}
           </Col>
           
-          <Col md={3} className="text-end">
+          <Col md={2} className="d-flex justify-content-end align-items-center">
             {(selectedCategory !== 'All' || selectedWeight !== 'All' || searchTerm) && (
-              <button className="clear-filters-btn" onClick={clearFilters}>
-                Clear All Filters
+              <button className="clear-filters-text" onClick={clearFilters}>
+                Clear Filters
               </button>
             )}
           </Col>
         </Row>
       </div>
 
-      <div className="table-container">
+      {/* Data Table */}
+      <div className="table-card">
         {!Array.isArray(filteredItems) || filteredItems.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">📦</div>
+            <div className="empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            </div>
             <h4>No items found</h4>
-            <p>
-              {!Array.isArray(items) || items.length === 0 
-                ? "Your inventory is empty. Click 'Add New Item' to get started."
-                : "No items match your current filters. Try adjusting your search criteria."}
-            </p>
+            <p>Your inventory is empty or no items match your search.</p>
             {(!Array.isArray(items) || items.length === 0) && (
               <button className="add-first-btn" onClick={openAddItemModal}>
-                Add Your First Item
+                Add First Item
               </button>
             )}
           </div>
         ) : (
           <div className="table-responsive">
-            <table className="items-table">
+            <table className="modern-table">
               <thead>
                 <tr>
-                  <th>Image</th>
+                  <th style={{width: '70px'}}>Image</th>
                   <th>Item Name</th>
                   <th>Category</th>
-                  <th>Weight</th>
+                  <th>Weight/Qty</th>
                   <th>Price</th>
-                  <th>Actions</th>
+                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredItems.map(item => (
                   <tr key={item._id || item.id}>
-                    <td className="image-cell">
+                    <td>
                       {item.image ? (
                         <img 
                           src={item.image} 
                           alt={item.name}
                           className="item-thumbnail"
-                          style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '8px' }}
-                          onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = 'https://via.placeholder.com/50?text=No+Image';
-                          }}
+                          onError={(e) => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80'; }}
                         />
                       ) : (
-                        <div className="no-image" style={{
-                          width: '50px',
-                          height: '50px',
-                          background: '#f0f0f0',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: '8px'
-                        }}>
-                          📷
+                        <div className="no-image-thumb">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                         </div>
                       )}
                     </td>
-                    <td className="name-cell">
-                      <div className="item-name">{item.name}</div>
-                    </td>
-                    <td>
-                      <Badge bg="info" className="category-badge">
-                        {item.category}
-                      </Badge>
-                    </td>
+                    <td className="fw-semibold text-dark">{item.name}</td>
+                    <td><span className="badge category-badge">{item.category}</span></td>
                     <td>
                       {item.weight ? (
-                        <Badge bg="secondary" className="weight-badge">
-                          {getWeightLabel(item.weight)}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted">-</span>
-                      )}
+                        <span className="badge weight-badge">{getWeightLabel(item.weight)}</span>
+                      ) : <span className="text-muted">-</span>}
                     </td>
-                    <td className="price-cell">₹{Number(item.price).toFixed(2)}</td>
-                    <td className="actions-cell">
-                      <button 
-                        className="action-icon edit-icon"
-                        onClick={() => openEditItemModal(item)}
-                        title="Edit Item"
-                      >
-                        ✏️
+                    <td className="fw-bold text-success">₹{Number(item.price).toFixed(2)}</td>
+                    <td className="text-end">
+                      <button className="btn-action edit" onClick={() => openEditItemModal(item)}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                       </button>
-                      <button 
-                        className="action-icon delete-icon"
-                        onClick={() => openDeleteModal(item)}
-                        title="Delete Item"
-                      >
-                        🗑️
+                      <button className="btn-action delete" onClick={() => openDeleteModal(item)}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                       </button>
                     </td>
                   </tr>
@@ -574,145 +490,83 @@ const AdminPage = () => {
         )}
       </div>
 
-      {/* Add/Edit Item Modal */}
-      <Modal show={showItemModal} onHide={() => setShowItemModal(false)} centered className="item-modal" size="lg">
+      {/* Item Modal (Redesigned) */}
+      <Modal show={showItemModal} onHide={() => setShowItemModal(false)} centered size="lg" className="premium-modal">
         <Modal.Header closeButton>
-          <Modal.Title>
-            {editingItem ? 'Edit Item' : 'Add New Item'}
-          </Modal.Title>
+          <Modal.Title>{editingItem ? 'Edit Item Details' : 'Add New Item'}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Form onSubmit={handleSubmitItem}>
             <Row>
-              <Col md={12}>
-                <Form.Group className="mb-3">
-                  <Form.Label>
-                    Item Name <span className="required-star">*</span>
-                  </Form.Label>
-                  <Form.Control
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleFormChange}
-                    placeholder="Enter item name (e.g., Basmati Rice)"
-                    required
-                  />
-                </Form.Group>
+              <Col md={8}>
+                {/* Text Inputs */}
+                <Row>
+                  <Col md={12}>
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-semibold">Item Name <span className="text-danger">*</span></Form.Label>
+                      <Form.Control type="text" name="name" value={formData.name} onChange={handleFormChange} placeholder="e.g. Basmati Rice" required className="modern-input" />
+                    </Form.Group>
+                  </Col>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-semibold">Category <span className="text-danger">*</span></Form.Label>
+                      <Form.Control type="text" name="category" value={formData.category} onChange={handleFormChange} placeholder="e.g. Grocery" required className="modern-input" />
+                    </Form.Group>
+                  </Col>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-semibold">Price (₹) <span className="text-danger">*</span></Form.Label>
+                      <Form.Control type="number" step="0.01" min="0" name="price" value={formData.price} onChange={handleFormChange} placeholder="0.00" required className="modern-input" />
+                    </Form.Group>
+                  </Col>
+                  <Col md={12}>
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-semibold">Weight/Quantity Variant (Optional)</Form.Label>
+                      <Form.Select name="weight" value={formData.weight} onChange={handleFormChange} className="modern-input">
+                        <option value="">No Variant / Default</option>
+                        {weightOptions.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                </Row>
               </Col>
-            </Row>
 
-            <Row>
-              <Col md={6}>
+              <Col md={4}>
+                {/* Image Upload Area */}
                 <Form.Group className="mb-3">
-                  <Form.Label>
-                    Category <span className="required-star">*</span>
-                  </Form.Label>
-                  <Form.Control
-                    type="text"
-                    name="category"
-                    value={formData.category}
-                    onChange={handleFormChange}
-                    placeholder="e.g., Rice, Pulses, Spices"
-                    required
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>
-                    Price (₹) <span className="required-star">*</span>
-                  </Form.Label>
-                  <Form.Control
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    name="price"
-                    value={formData.price}
-                    onChange={handleFormChange}
-                    placeholder="0.00"
-                    required
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-
-            <Row>
-              <Col md={12}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Weight/Quantity (Optional)</Form.Label>
-                  <Form.Select
-                    name="weight"
-                    value={formData.weight}
-                    onChange={handleFormChange}
-                  >
-                    <option value="">Select weight/quantity</option>
-                    {weightOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Form.Select>
-                  <Form.Text className="text-muted">
-                    Select weight for items like Rice, Pulses, Grains. Leave empty for other items.
-                  </Form.Text>
-                </Form.Group>
-              </Col>
-            </Row>
-
-            <Row>
-              <Col md={12}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Image URL (Optional)</Form.Label>
-                  <Form.Control
-                    type="url"
-                    name="imageUrl"
-                    value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                  />
-                  <Form.Text className="text-muted">
-                    Enter a direct URL to the item image (e.g., from Google Drive, Imgur, or any image hosting service)
-                  </Form.Text>
-                  {imageUrl && (
-                    <div className="mt-2">
-                      <small className="text-success">Preview:</small>
-                      <img 
-                        src={imageUrl} 
-                        alt="Preview" 
-                        style={{ 
-                          maxWidth: '100%', 
-                          maxHeight: '100px', 
-                          objectFit: 'contain',
-                          display: 'block',
-                          marginTop: '5px',
-                          border: '1px solid #ddd',
-                          borderRadius: '4px',
-                          padding: '5px'
-                        }}
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          document.getElementById('image-error').style.display = 'block';
-                        }}
-                      />
-                      <div id="image-error" style={{ display: 'none', color: 'red', fontSize: '12px', marginTop: '5px' }}>
-                        ⚠️ Invalid image URL. Please check the link.
+                  <Form.Label className="fw-semibold">Item Photo</Form.Label>
+                  <div className="image-upload-wrapper">
+                    {imageUrl ? (
+                      <div className="uploaded-image-preview">
+                        <img src={imageUrl} alt="Preview" />
+                        <button type="button" className="remove-image-btn" onClick={() => { setImageUrl(''); setImageFile(null); }}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="image-upload-placeholder" onClick={() => document.getElementById('file-upload').click()}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        <span>Click to choose from gallery</span>
+                        <small>Max size: 10MB</small>
+                      </div>
+                    )}
+                    <input 
+                      type="file" 
+                      id="file-upload" 
+                      accept="image/*" 
+                      style={{ display: 'none' }} 
+                      onChange={handleImageUpload} 
+                    />
+                  </div>
                 </Form.Group>
               </Col>
             </Row>
 
-            <div className="form-footer">
-              <Button variant="secondary" onClick={() => setShowItemModal(false)}>
-                Cancel
-              </Button>
-              <Button 
-                variant="primary" 
-                type="submit" 
-                className="save-btn"
-                disabled={submitting}
-              >
+            <div className="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+              <Button variant="light" className="px-4 fw-semibold" onClick={() => setShowItemModal(false)}>Cancel</Button>
+              <Button variant="success" type="submit" className="px-4 fw-semibold" disabled={submitting}>
                 {submitting ? 'Saving...' : (editingItem ? 'Update Item' : 'Add Item')}
               </Button>
             </div>
@@ -720,38 +574,19 @@ const AdminPage = () => {
         </Modal.Body>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
-      <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)} centered className="delete-modal">
-        <Modal.Header closeButton>
-          <Modal.Title>Confirm Delete</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <div className="delete-confirmation">
-            <div className="delete-icon">⚠️</div>
-            <h5>Are you sure you want to delete this item?</h5>
-            {itemToDelete && (
-              <div className="item-details">
-                <p><strong>Name:</strong> {itemToDelete.name}</p>
-                <p><strong>Category:</strong> {itemToDelete.category}</p>
-                {itemToDelete.weight && (
-                  <p><strong>Weight:</strong> {getWeightLabel(itemToDelete.weight)}</p>
-                )}
-                <p><strong>Price:</strong> ₹{Number(itemToDelete.price).toFixed(2)}</p>
-              </div>
-            )}
-            <p className="delete-warning">
-              This action cannot be undone. The item will be permanently removed from your inventory.
-            </p>
+      {/* Delete Modal (Redesigned) */}
+      <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)} centered className="premium-modal modal-sm">
+        <Modal.Body className="text-center p-4">
+          <div className="delete-icon-large text-danger mb-3">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          </div>
+          <h4 className="fw-bold mb-2">Delete Item?</h4>
+          <p className="text-muted mb-4">You are about to delete <strong>{itemToDelete?.name}</strong>. This action cannot be undone.</p>
+          <div className="d-flex gap-2">
+            <Button variant="light" className="flex-fill fw-semibold" onClick={() => setShowDeleteModal(false)}>Cancel</Button>
+            <Button variant="danger" className="flex-fill fw-semibold" onClick={handleDeleteItem}>Delete</Button>
           </div>
         </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={handleDeleteItem}>
-            Delete Item
-          </Button>
-        </Modal.Footer>
       </Modal>
     </Container>
   );

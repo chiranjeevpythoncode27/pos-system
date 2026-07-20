@@ -15,10 +15,8 @@ const Main = () => {
   const [error, setError] = useState(null);
   const [categories, setCategories] = useState(['All']);
   
-  // Customer info for order
+  // Customer info for order - only name as requested
   const [customerName, setCustomerName] = useState('');
-  const [customerAddress, setCustomerAddress] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
   
   const [placingOrder, setPlacingOrder] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
@@ -29,19 +27,8 @@ const Main = () => {
 
   // Categories that get weight options
   const weightEnabledCategories = [
-    'Rice', 
-    'Pulses', 
-    'Dal', 
-    'Grains', 
-    'Flour', 
-    'Atta', 
-    'Spices', 
-    'Masala', 
-    'Sugar', 
-    'Salt', 
-    'Dry Fruits', 
-    'Cereals',
-    'Grocery'
+    'Rice', 'Pulses', 'Dal', 'Grains', 'Flour', 'Atta', 'Spices', 
+    'Masala', 'Sugar', 'Salt', 'Dry Fruits', 'Cereals', 'Grocery'
   ];
 
   // Weight options with labels and multipliers
@@ -69,7 +56,6 @@ const Main = () => {
     try {
       setLoading(true);
       const response = await axios.get(`${API_URL}/items`);
-      console.log('API Response:', response.data);
 
       let items = [];
       if (Array.isArray(response.data)) {
@@ -78,12 +64,8 @@ const Main = () => {
         items = response.data.items;
       } else if (response.data && typeof response.data === 'object') {
         items = Object.values(response.data);
-      } else {
-        console.error('Unexpected data format:', response.data);
-        items = [];
       }
 
-      console.log('Processed items:', items);
       setMenuItems(items);
 
       // Extract unique categories
@@ -93,7 +75,7 @@ const Main = () => {
       ];
       setCategories(uniqueCategories);
 
-      // Initialize selected weights - default to 1kg (1000) for weight-based items
+      // Initialize selected weights
       const initialWeights = {};
       items.forEach(item => {
         if (weightEnabledCategories.includes(item.category)) {
@@ -101,7 +83,6 @@ const Main = () => {
         }
       });
       setSelectedWeights(initialWeights);
-
       setError(null);
     } catch (err) {
       console.error('Error fetching menu items:', err);
@@ -112,48 +93,47 @@ const Main = () => {
     }
   };
 
-  // Helper function to format prices
   const formatPrice = (price) => {
     return price ? price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : '0';
   };
 
-  // Show notification
   const showAddNotification = (itemName) => {
     setNotificationMessage(`${itemName} added to cart!`);
     setShowNotification(true);
     setTimeout(() => setShowNotification(false), 2000);
   };
 
-  // Filter menu items based on category and search
+  // Category free search
   const getFilteredItems = () => {
     if (!Array.isArray(menuItems)) return [];
     
     return menuItems.filter(item => {
       if (!item) return false;
-      const matchesCategory = activeCategory === 'All' || item.category === activeCategory;
       const matchesSearch = item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesCategory && matchesSearch;
+      
+      // If there's a search term, ignore category filter completely
+      if (searchTerm) {
+        return matchesSearch;
+      }
+      
+      const matchesCategory = activeCategory === 'All' || item.category === activeCategory;
+      return matchesCategory;
     });
   };
 
-  // Get items for search count
   const searchedItems = Array.isArray(menuItems) ? menuItems.filter(item => {
     return item && item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase());
   }) : [];
 
   const displayedItems = getFilteredItems();
 
-  // Check if item should have weight options
   const hasWeightOptions = (item) => {
     return item && weightEnabledCategories.includes(item.category);
   };
 
-  // Get available weight options with prices
   const getWeightOptions = (item) => {
     if (!item) return [];
     const basePrice = item.price || 0;
-    
-    // Calculate price based on weight option
     return weightOptionsList.map(option => ({
       weight: parseInt(option.value),
       price: Math.round(basePrice * option.multiplier),
@@ -162,7 +142,6 @@ const Main = () => {
     }));
   };
 
-  // Handle weight selection
   const selectWeight = (itemId, weight) => {
     setSelectedWeights(prev => ({
       ...prev,
@@ -170,7 +149,6 @@ const Main = () => {
     }));
   };
 
-  // Get display price based on selected weight
   const getDisplayPrice = (item) => {
     if (!item) return 0;
     if (hasWeightOptions(item)) {
@@ -182,19 +160,6 @@ const Main = () => {
     return item.price || 0;
   };
 
-  // Get selected weight label
-  const getSelectedWeightLabel = (item) => {
-    if (!item) return '';
-    if (hasWeightOptions(item)) {
-      const selectedWeight = selectedWeights[item._id] || '1000';
-      const weightOptions = getWeightOptions(item);
-      const option = weightOptions.find(opt => opt.weight.toString() === selectedWeight.toString());
-      return option ? option.label : '1kg';
-    }
-    return '';
-  };
-
-  // Cart functions
   const addToCart = (item) => {
     if (!item) return;
     
@@ -234,11 +199,8 @@ const Main = () => {
             baseName: item.name
           }];
         }
-
-
       });
     } else {
-      // Regular item without weight options
       setCart(prevCart => {
         const existingItem = prevCart.find(cartItem => cartItem.id === item._id);
         if (existingItem) {
@@ -270,6 +232,10 @@ const Main = () => {
     setCart(prevCart => prevCart.filter(item => item.id !== itemId));
   };
 
+  const clearCart = () => {
+    setCart([]);
+  };
+
   const updateQuantity = (itemId, newQuantity) => {
     if (newQuantity < 1) {
       removeFromCart(itemId);
@@ -293,8 +259,13 @@ const Main = () => {
     return cart.reduce((total, item) => total + item.quantity, 0);
   };
 
-  const getTotalPrice = () => {
+  const getItemTotal = () => {
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+  };
+
+  const getTotalPrice = () => {
+    if (cart.length === 0) return 0;
+    return getItemTotal();
   };
 
   const toggleCart = () => {
@@ -305,146 +276,94 @@ const Main = () => {
     setIsCartOpen(false);
   };
 
-  // Handle category click
   const handleCategoryClick = (category) => {
     setActiveCategory(category);
+    // If clicking a category, clear search so it filters correctly
+    if (searchTerm) setSearchTerm('');
   };
 
-  // Handle search input change
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
   };
 
-  // Clear search
   const handleClearSearch = () => {
     setSearchTerm('');
   };
 
-  // Handle customer info changes
   const handleCustomerNameChange = (e) => {
     setCustomerName(e.target.value);
   };
 
-  const handleCustomerAddressChange = (e) => {
-    setCustomerAddress(e.target.value);
-  };
-
-  const handleCustomerPhoneChange = (e) => {
-    setCustomerPhone(e.target.value);
-  };
-
-  // Generate invoice message for WhatsApp with address
   const generateInvoiceMessage = () => {
     const date = new Date();
     const orderId = "ORD" + Date.now().toString().slice(-6);
-    const formattedDate = date.toLocaleDateString("en-IN");
-    const formattedTime = date.toLocaleTimeString("en-IN");
-
-    let message = `🧾 *QUICKO - NEW ORDER* 🧾\n\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `👤 *Customer Name:* ${customerName}\n`;
-    message += `📞 *Phone:* ${customerPhone}\n`;
-    message += `📍 *Delivery Address:* ${customerAddress}\n`;
+    
+    let message = `🧾 *NEW ORDER - Suyal General Store* 🧾\n\n`;
+    message += `👤 *Name:* ${customerName}\n`;
     message += `🆔 *Order ID:* ${orderId}\n`;
-    message += `📅 *Date:* ${formattedDate}\n`;
-    message += `⏰ *Time:* ${formattedTime}\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `*ORDER DETAILS:*\n`;
     message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `Item                          Qty    Price\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-
+    
     cart.forEach((item) => {
       const total = item.price * item.quantity;
-      const itemName = item.name.length > 25 ? item.name.substring(0, 22) + '...' : item.name;
-      message += `${itemName.padEnd(25)} ${item.quantity.toString().padStart(3)}   ₹${formatPrice(total).padStart(10)}\n`;
+      message += `${item.name} x ${item.quantity}  -  ₹${formatPrice(total)}\n`;
     });
-
+    
     message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `📦 *Total Items:* ${getTotalItems()}\n`;
-    message += `💰 *Total Amount:* ₹${formatPrice(getTotalPrice())}\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `*DELIVERY INFORMATION:*\n`;
-    message += `🚚 Delivery to: ${customerAddress}\n`;
-    message += `👤 Contact Person: ${customerName}\n`;
-    message += `📞 Contact Number: ${customerPhone}\n\n`;
-    message += `🙏 *Thank you for shopping with Quicko!*\n`;
-    message += `⭐ Please share your feedback\n\n`;
-    message += `📍 *Quicko - Your Trusted Store*\n`;
-    message += `📞 Contact: +91 7060988418\n`;
-    message += `🕐 Delivery Time: 30-45 minutes`;
-
+    message += `💰 *To Pay:* ₹${formatPrice(getTotalPrice())}\n`;
     return message;
   };
 
-  // Place order via WhatsApp
   const placeOrder = async () => {
     if (!customerName.trim()) {
       alert('Please enter your name');
       return;
     }
-
-    if (!customerAddress.trim()) {
-      alert('Please enter your delivery address');
-      return;
-    }
-
-    if (!customerPhone.trim()) {
-      alert('Please enter your phone number');
-      return;
-    }
-
-    if (cart.length === 0) {
-      alert('Your cart is empty');
-      return;
-    }
+    if (cart.length === 0) return;
 
     setPlacingOrder(true);
-
     try {
       const invoiceMessage = generateInvoiceMessage();
       const storePhone = "917060988418";
       const whatsappLink = `https://wa.me/${storePhone}?text=${encodeURIComponent(invoiceMessage)}`;
       window.open(whatsappLink, '_blank');
       
-      // Reset form and cart
       setCart([]);
       setCustomerName('');
-      setCustomerAddress('');
-      setCustomerPhone('');
       closeCart();
-      alert('Order placed successfully! Redirecting to WhatsApp...');
     } catch (err) {
-      console.error('Error placing order:', err);
       alert('Failed to place order. Please try again.');
     } finally {
       setPlacingOrder(false);
     }
   };
 
-  // Loading state
+  // Helper to get emoji for categories
+  const getCategoryEmoji = (category) => {
+    const lower = category.toLowerCase();
+    if (lower === 'all') return '🔠';
+    if (lower.includes('rice') || lower.includes('grain')) return '🍚';
+    if (lower.includes('dal') || lower.includes('pulse')) return '🥣';
+    if (lower.includes('flour') || lower.includes('atta')) return '🌾';
+    if (lower.includes('spice') || lower.includes('masala')) return '🌶️';
+    if (lower.includes('sugar') || lower.includes('salt')) return '🧂';
+    if (lower.includes('dry fruit')) return '🥜';
+    if (lower.includes('oil')) return '🛢️';
+    if (lower.includes('snack')) return '🥨';
+    if (lower.includes('beverage') || lower.includes('drink')) return '🥤';
+    if (lower.includes('dairy') || lower.includes('milk')) return '🥛';
+    if (lower.includes('veg')) return '🥬';
+    if (lower.includes('fruit')) return '🍎';
+    if (lower.includes('breakfast')) return '🍞';
+    if (lower.includes('chinese')) return '🍜';
+    if (lower.includes('tandoori')) return '🍢';
+    return '🛒'; // default grocery
+  };
+
   if (loading) {
     return (
       <div className="menu-page">
         <div className="loading-container">
           <div className="loading-spinner"></div>
-          <p>Loading our delicious menu...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div className="menu-page">
-        <div className="error-container">
-          <div className="error-icon">⚠️</div>
-          <h3>Oops! Something went wrong</h3>
-          <p>{error}</p>
-          <button className="retry-btn" onClick={fetchMenuItems}>
-            Try Again
-          </button>
         </div>
       </div>
     );
@@ -452,7 +371,6 @@ const Main = () => {
 
   return (
     <div className="menu-page">
-      {/* Notification */}
       {showNotification && (
         <div className="notification">
           <span className="notification-icon">✓</span>
@@ -465,16 +383,36 @@ const Main = () => {
         <div className="nav-container">
           <div className="nav-content">
             <div className="nav-brand">
-              <h1 className="store-name">Quicko</h1>
+              <h1 className="store-name">Suyal General Store</h1>
             </div>
           </div>
         </div>
       </nav>
 
       {/* Menu Section */}
-      <div className={`menu-container ${isCartOpen ? 'blur-background' : ''}`}>
-        {/* Search Bar */}
-        <div className="search-container">
+      <div className={`menu-container ${isCartOpen ? 'hidden' : ''}`}>
+        
+        {/* Banner Section */}
+        <a href="#offers" className="banner-link">
+          <div className="banner-container">
+            <div className="banner-content">
+              <h2>Fresh Groceries,<br/><span>Everyday!</span></h2>
+              <p>Quality ingredients. Best prices.</p>
+              <button className="banner-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                Shop Now
+              </button>
+            </div>
+            <div className="banner-dots">
+              <span className="dot active"></span>
+              <span className="dot"></span>
+              <span className="dot"></span>
+            </div>
+          </div>
+        </a>
+
+        {/* Search Bar & Filter */}
+        <div className="search-filter-container">
           <div className="search-bar">
             <div className="search-icon">
               <svg className="search-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -483,10 +421,10 @@ const Main = () => {
             </div>
             <input
               type="text"
+              placeholder="Search for items, groceries..."
               value={searchTerm}
               onChange={handleSearchChange}
               className="search-input"
-             
             />
             {searchTerm && (
               <button className="clear-search-btn" onClick={handleClearSearch}>
@@ -496,62 +434,63 @@ const Main = () => {
               </button>
             )}
           </div>
+          <button className="filter-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line>
+              <line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line>
+              <line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line>
+            </svg>
+          </button>
         </div>
 
-        {/* Category Filters */}
+        {/* Circular Category Filters - compact layout */}
         <div className="category-filters-wrapper">
           <div className="category-filters">
             {categories.map(category => (
-              <button
+              <div 
                 key={category}
-                className={`category-btn ${activeCategory === category ? 'active' : ''}`}
+                className={`category-item ${activeCategory === category ? 'active' : ''}`}
                 onClick={() => handleCategoryClick(category)}
               >
-                {category}
-              </button>
+                <div className="category-icon-circle">
+                  <span className="category-emoji">{getCategoryEmoji(category)}</span>
+                </div>
+                <span className="category-label">{category}</span>
+                {activeCategory === category && <div className="active-indicator"></div>}
+              </div>
             ))}
           </div>
         </div>
 
-        {/* Search Results Info */}
-        {searchTerm && (
-          <div className="search-results-info">
-            <p>
-              Found <strong>{searchedItems.length}</strong> {searchedItems.length === 1 ? 'item' : 'items'} matching "<strong>{searchTerm}</strong>"
-              {activeCategory !== 'All' && ` • Showing from ${activeCategory} category`}
-            </p>
-          </div>
-        )}
+        {/* Section Header */}
+        <div className="section-header">
+          <h3>{searchTerm ? 'Search Results' : 'Popular Items'}</h3>
+          {!searchTerm && <button className="view-all-btn">View All <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg></button>}
+        </div>
 
         {/* Menu Items Grid */}
         <div className="menu-grid">
           {displayedItems.map(item => (
             <div key={item._id} className="menu-card">
-              {/* Image Container */}
               <div className="card-image-container">
                 <img
-                  src={item.image || 'https://via.placeholder.com/300x200?text=No+Image'}
+                  src={item.image || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&q=80'}
                   alt={item.name}
                   className="card-image"
                   onError={(e) => {
                     e.target.onerror = null;
-                    e.target.src = 'https://via.placeholder.com/300x200?text=Image+Not+Available';
+                    e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&q=80';
                   }}
                 />
-                {item.stock !== undefined && (
-                  <div className={`stock-badge ${item.stock > 0 ? 'in-stock' : 'out-of-stock'}`}>
-                    {item.stock > 0 ? `In Stock: ${item.stock}` : 'Out of Stock'}
-                  </div>
-                )}
+                <div className={`diet-badge ${item.category?.toLowerCase().includes('non veg') ? 'non-veg' : 'veg'}`}>
+                   {item.category?.toLowerCase().includes('non veg') ? '🔴' : '🌿'}
+                </div>
               </div>
 
-              {/* Content */}
               <div className="card-content">
-                <div className="card-header">
-                  <h3 className="item-name">{item.name}</h3>
-                </div>
+                <h3 className="item-name">{item.name}</h3>
                 
-                {/* Horizontal Scrollable Weight Selector */}
                 {hasWeightOptions(item) && (
                   <div className="weight-selector-container">
                     <div className="weight-selector-scroll">
@@ -572,24 +511,14 @@ const Main = () => {
                 <div className="card-footer">
                   <div className="price-section">
                     <span className="item-price">₹{formatPrice(getDisplayPrice(item))}</span>
-                    {!hasWeightOptions(item) && item.unit && (
-                      <span className="item-unit">/{item.unit}</span>
-                    )}
                   </div>
                   
-                  {/* Add to Cart Button */}
                   <button 
-                    className="add-to-cart-btn"
+                    className="add-to-cart-outline-btn"
                     onClick={() => addToCart(item)}
                     disabled={item.stock === 0}
                   >
-                    {item.stock === 0 ? (
-                      'Out of Stock'
-                    ) : (
-                      <svg className="plus-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M12 5v14M5 12h14" />
-                      </svg>
-                    )}
+                    {item.stock === 0 ? 'Out' : '+ Add'}
                   </button>
                 </div>
               </div>
@@ -597,156 +526,148 @@ const Main = () => {
           ))}
         </div>
 
-        {/* No items message */}
         {displayedItems.length === 0 && (
           <div className="no-items-message">
             <div className="no-items-icon">🔍</div>
-            <p>
-              {searchTerm 
-                ? `No items found for "${searchTerm}"${activeCategory !== 'All' ? ` in ${activeCategory}` : ''}`
-                : `No items available in ${activeCategory} category.`
-              }
-            </p>
-            {searchTerm && (
-              <button className="clear-search-message-btn" onClick={handleClearSearch}>
-                Clear Search
-              </button>
-            )}
+            <p>No items found.</p>
           </div>
         )}
       </div>
 
-      {/* Floating Cart Button */}
-      <div className="floating-cart" onClick={toggleCart}>
-        <svg className="floating-cart-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-        </svg>
-        {getTotalItems() > 0 && (
-          <span className="floating-cart-badge">{getTotalItems()}</span>
-        )}
-        {getTotalItems() > 0 && (
-          <span className="floating-cart-total">₹{formatPrice(getTotalPrice().toFixed(2))}</span>
-        )}
-      </div>
-
-      {/* Cart Sidebar */}
-      {isCartOpen && (
-        <>
-          <div className="cart-overlay" onClick={closeCart}></div>
-          <div className="cart-sidebar">
-            <div className="cart-header">
-              <h3>Your Cart ({getTotalItems()})</h3>
-              <button className="close-cart-btn" onClick={closeCart}>
-                <svg className="close-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="cart-items">
-              {cart.length === 0 ? (
-                <div className="empty-cart">
-                  <div className="empty-cart-icon">🛒</div>
-                  <p>Your cart is empty</p>
-                  <p className="empty-cart-text">Add some items to get started!</p>
-                </div>
-              ) : (
-                <>
-                  {cart.map(item => (
-                    <div key={item.id} className="cart-item">
-                      <div className="cart-item-info">
-                        <span className="cart-item-name">{item.name}</span>
-                        <span className="cart-item-price">₹{formatPrice((item.price * item.quantity).toFixed(2))}</span>
-                      </div>
-                      <div className="cart-item-controls">
-                        <button 
-                          className="quantity-btn minus"
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        >
-                          -
-                        </button>
-                        <span className="quantity">{item.quantity}</span>
-                        <button 
-                          className="quantity-btn plus"
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          disabled={item.quantity >= item.stock}
-                        >
-                          +
-                        </button>
-                        <button 
-                          className="remove-btn"
-                          onClick={() => removeFromCart(item.id)}
-                        >
-                          <svg className="remove-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Customer Information Form */}
-                  <div className="customer-info-form">
-                    <h4>Delivery Details</h4>
-                    <input
-                      type="text"
-                      placeholder="Full Name *"
-                      value={customerName}
-                      onChange={handleCustomerNameChange}
-                      className="customer-input"
-                    />
-                    <input
-                      type="tel"
-                      placeholder="Phone Number *"
-                      value={customerPhone}
-                      onChange={handleCustomerPhoneChange}
-                      className="customer-input"
-                    />
-                    <textarea
-                      placeholder="Complete Delivery Address *"
-                      value={customerAddress}
-                      onChange={handleCustomerAddressChange}
-                      className="customer-textarea"
-                      rows="3"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-            
-            {cart.length > 0 && (
-              <div className="cart-footer">
-                <div className="cart-total">
-                  <span>Total:</span>
-                  <span className="total-amount">₹{formatPrice(getTotalPrice().toFixed(2))}</span>
-                </div>
-                <button 
-                  className="checkout-btn" 
-                  onClick={placeOrder}
-                  disabled={placingOrder || !customerName.trim() || !customerAddress.trim() || !customerPhone.trim()}
-                >
-                  {placingOrder ? 'Placing Order...' : 'Order via WhatsApp'}
-                </button>
-              </div>
-            )}
+      {/* Floating Bottom Cart Bar */}
+      {getTotalItems() > 0 && !isCartOpen && (
+        <div className="bottom-cart-bar" onClick={toggleCart}>
+          <div className="bottom-cart-left">
+             <div className="bottom-cart-icon-wrapper">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                 <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+               </svg>
+               <span className="bottom-cart-count">{getTotalItems()}</span>
+             </div>
+             <span className="bottom-cart-text">View Cart</span>
           </div>
-        </>
-      )}
-
-      {/* Footer */}
-      <footer className="footer">
-        <div className="footer-container">
-          <div className="footer-grid">
-            <div className="footer-section">
-              <h3 className="footer-title">Quicko</h3>
-              <p className="footer-text">Your one-stop shop for all grocery needs.</p>
-            </div>
-          </div>
-          <div className="footer-bottom">
-            <p>&copy; 2025 Quicko. All rights reserved.</p>
+          <div className="bottom-cart-right">
+             <span className="bottom-cart-total">₹{formatPrice(getTotalPrice())}</span>
+             <svg className="chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
           </div>
         </div>
-      </footer>
+      )}
+
+      {/* Full Page Cart Redesign */}
+      {isCartOpen && (
+        <div className="cart-page">
+          <div className="cart-page-header">
+            <button className="back-btn" onClick={closeCart}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            </button>
+            <div className="nav-brand">
+              <h1 className="store-name">Suyal General Store</h1>
+            </div>
+            <button className="clear-cart-text-btn" onClick={clearCart}>
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+               Clear Cart
+            </button>
+          </div>
+
+          <div className="cart-page-content">
+            {/* Cart Summary Banner */}
+            <div className="cart-summary-banner">
+              <div className="cart-summary-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <div className="cart-summary-text">
+                <h2>Your Cart</h2>
+                <p>{getTotalItems()} Items • All items selected</p>
+              </div>
+            </div>
+
+            {/* Cart Items List */}
+            <div className="cart-items-list">
+              {cart.map(item => (
+                <div key={item.id} className="cart-item-row">
+                  <div className="cart-item-check">
+                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                  </div>
+                  <div className="cart-item-image">
+                    <img src={item.image || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80'} alt={item.name} />
+                  </div>
+                  <div className="cart-item-details">
+                    <div className="cart-item-title-row">
+                      <h4>{item.name}</h4>
+                      <button className="item-remove-btn" onClick={() => removeFromCart(item.id)}>✕</button>
+                    </div>
+                    <div className="cart-item-customizable">
+                       <span className="dot-green"></span> Customizable
+                    </div>
+                    <div className="cart-item-price-row">
+                       <span className="cart-item-price">₹{formatPrice(item.price)}</span>
+                       <div className="cart-item-quantity">
+                         <button onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button>
+                         <span>{item.quantity}</span>
+                         <button onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+
+
+            {/* Bill Summary */}
+            <div className="bill-summary">
+              <h3>Bill Summary</h3>
+              <div className="bill-row">
+                <span>Item Total ({getTotalItems()} items)</span>
+                <span>₹{formatPrice(getItemTotal())}</span>
+              </div>
+              <div className="bill-divider"></div>
+              <div className="bill-row total-pay">
+                <span>To Pay</span>
+                <span>₹{formatPrice(getTotalPrice())}</span>
+              </div>
+            </div>
+            
+            {/* Customer Details (Name only) */}
+            <div className="bill-summary customer-form">
+               <input
+                  type="text"
+                  placeholder="Your Name *"
+                  value={customerName}
+                  onChange={handleCustomerNameChange}
+                  className="cart-customer-input"
+                />
+            </div>
+            
+            {/* Extra padding for fixed bottom bar */}
+            <div style={{height: '100px'}}></div>
+          </div>
+
+          {/* Checkout Bottom Bar */}
+          <div className="checkout-bottom-bar">
+            <div className="secure-checkout">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+              <div>
+                <strong>Secure Checkout</strong>
+                <p>100% safe & secure payments</p>
+              </div>
+            </div>
+            <button 
+              className="place-order-btn"
+              onClick={placeOrder}
+              disabled={placingOrder || !customerName.trim()}
+            >
+              <div>
+                <strong>Place Order</strong>
+                <p>Total ₹{formatPrice(getTotalPrice())}</p>
+              </div>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
