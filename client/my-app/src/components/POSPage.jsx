@@ -23,6 +23,8 @@ const AdminPage = () => {
   
   const [availableWeights, setAvailableWeights] = useState(['All']);
   const [submitting, setSubmitting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const [formData, setFormData] = useState({
     name: '',
     price: '',
@@ -216,6 +218,71 @@ const AdminPage = () => {
     }
   };
 
+  const handleCSVUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target.result;
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+        if (lines.length < 2) {
+          showAlert('CSV file is empty or missing data rows.', 'warning');
+          return;
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        const nameIdx = headers.findIndex(h => h.includes('name') || h.includes('item'));
+        const priceIdx = headers.findIndex(h => h.includes('price'));
+        const catIdx = headers.findIndex(h => h.includes('category'));
+        const weightIdx = headers.findIndex(h => h.includes('weight') || h.includes('qty'));
+
+        if (nameIdx === -1 || priceIdx === -1 || catIdx === -1) {
+          showAlert('CSV must contain Name, Price, and Category columns.', 'danger');
+          return;
+        }
+
+        setImporting(true);
+        setImportProgress({ current: 0, total: lines.length - 1 });
+        
+        let successCount = 0;
+        
+        for (let i = 1; i < lines.length; i++) {
+          const row = lines[i].split(',').map(col => col.trim());
+          if (row.length < 3 || !row[nameIdx] || !row[priceIdx]) continue;
+          
+          const itemData = {
+            name: row[nameIdx],
+            price: parseFloat(row[priceIdx]) || 0,
+            category: row[catIdx] || 'Uncategorized',
+            image: '' 
+          };
+          if (weightIdx !== -1 && row[weightIdx]) {
+            itemData.weight = row[weightIdx];
+          }
+
+          try {
+            await itemAPI.create(itemData);
+            successCount++;
+          } catch (err) {
+            console.error('Failed to import row', i, err);
+          }
+          setImportProgress({ current: i, total: lines.length - 1 });
+        }
+        
+        showAlert(`Successfully imported ${successCount} items from CSV!`, 'success');
+        await fetchItems();
+      } catch (err) {
+        showAlert('Error parsing CSV file.', 'danger');
+      } finally {
+        setImporting(false);
+        e.target.value = null; // Reset input
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleSubmitItem = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.price || !formData.category) {
@@ -326,6 +393,11 @@ const AdminPage = () => {
           <button className="action-btn refresh-btn" onClick={fetchItems}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-10.26l5.08 5.08"/></svg>
             Refresh
+          </button>
+          <input type="file" id="csv-upload" accept=".csv" style={{ display: 'none' }} onChange={handleCSVUpload} />
+          <button className="action-btn" onClick={() => document.getElementById('csv-upload').click()} disabled={importing} style={{ background: '#f59e0b', color: 'white', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.2)' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            {importing ? `Importing ${importProgress.current}/${importProgress.total}...` : 'Import CSV'}
           </button>
           <button className="action-btn add-btn" onClick={openAddItemModal}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
